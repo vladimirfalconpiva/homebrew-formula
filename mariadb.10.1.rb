@@ -1,4 +1,4 @@
-class Mariadb < Formula
+class Mariadb101 < Formula
   desc "Drop-in replacement for MySQL"
   homepage "https://mariadb.org/"
   url "https://downloads.mariadb.org/f/mariadb-10.1.28/source/mariadb-10.1.28.tar.gz"
