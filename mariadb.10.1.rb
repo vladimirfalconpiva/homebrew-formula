@@ -11,11 +11,6 @@ class Mariadb101 < Formula
     sha256 "d6da0b6169d6eafb7228de64284485f5f4e99402b731b2504a9f02f9e8f332c3" => :yosemite
   end
 
-  devel do
-    url "http://ftp.hosteurope.de/mirror/archive.mariadb.org/mariadb-10.2.5/source/mariadb-10.2.5.tar.gz"
-    sha256 "6629bd2392ccba2fb30ce3a27efddba1f695ac739538007ad1d15caeed19ff50"
-  end
-
   option "with-test", "Keep test when installing"
   option "with-bench", "Keep benchmark app when installing"
   option "with-embedded", "Build the embedded server"
@@ -28,7 +23,6 @@ class Mariadb101 < Formula
   deprecated_option "with-tests" => "with-test"
 
   depends_on "cmake" => :build
-  depends_on "pidof" unless MacOS.version >= :mountain_lion
   depends_on "openssl"
 
   conflicts_with "mysql", "mysql-cluster", "percona-server",
@@ -40,14 +34,6 @@ class Mariadb101 < Formula
     :because => "both install plugins"
 
   def install
-    if build.devel?
-      # Don't hard-code the libtool path. See:
-      # https://github.com/Homebrew/homebrew/issues/20185
-      inreplace "cmake/libutils.cmake",
-        "COMMAND /usr/bin/libtool -static -o ${TARGET_LOCATION}",
-        "COMMAND libtool -static -o ${TARGET_LOCATION}"
-    end
-
     # Set basedir and ldata so that mysql_install_db can find the server
     # without needing an explicit path to be set. This can still
     # be overridden by calling --basedir= when calling.
@@ -64,18 +50,16 @@ class Mariadb101 < Formula
       -DINSTALL_DOCDIR=share/doc/#{name}
       -DINSTALL_INFODIR=share/info
       -DINSTALL_MYSQLSHAREDIR=share/mysql
+      -DWITH_PCRE=bundled
       -DWITH_SSL=yes
-      -DDEFAULT_CHARSET=utf8
-      -DDEFAULT_COLLATION=utf8_general_ci
+      -DDEFAULT_CHARSET=utf8mb4
+      -DDEFAULT_COLLATION=utf8mb4_general_ci
       -DINSTALL_SYSCONFDIR=#{etc}
       -DCOMPILATION_COMMENT=Homebrew
     ]
 
     # disable TokuDB, which is currently not supported on macOS
     args << "-DPLUGIN_TOKUDB=NO"
-
-    # disable MyRocks, which is currently alpha
-    args << "-DPLUGIN_ROCKSDB=NO" if build.devel?
 
     args << "-DWITH_UNIT_TESTS=OFF" if build.without? "test"
 
@@ -115,18 +99,11 @@ class Mariadb101 < Formula
     bin.install_symlink prefix/"scripts/mysql_install_db"
 
     # Fix up the control script and link into bin
-    inreplace "#{prefix}/support-files/mysql.server" do |s|
-      s.gsub!(/^(PATH=".*)(")/, "\\1:#{HOMEBREW_PREFIX}/bin\\2")
-      if build.devel?
-        # pidof can be replaced with pgrep from proctools on Mountain Lion
-        s.gsub!(/pidof/, "pgrep") if MacOS.version >= :mountain_lion
-      end
-    end
+    inreplace "#{prefix}/support-files/mysql.server", /^(PATH=".*)(")/, "\\1:#{HOMEBREW_PREFIX}/bin\\2"
 
     bin.install_symlink prefix/"support-files/mysql.server"
 
     # Move sourced non-executable out of bin into libexec
-    libexec.mkpath
     libexec.install "#{bin}/wsrep_sst_common"
     # Fix up references to wsrep_sst_common
     %w[
@@ -140,7 +117,7 @@ class Mariadb101 < Formula
     end
 
     # Install my.cnf that binds to 127.0.0.1 by default
-    (buildpath/"my.cnf").write <<-EOS.undent
+    (buildpath/"my.cnf").write <<~EOS
       # Default Homebrew MySQL server config
       [mysqld]
       # Only allow connections from localhost
@@ -159,7 +136,7 @@ class Mariadb101 < Formula
     end
   end
 
-  def caveats; <<-EOS.undent
+  def caveats; <<~EOS
     A "/etc/my.cnf" from another install may interfere with a Homebrew-built
     server starting up correctly.
 
@@ -167,12 +144,12 @@ class Mariadb101 < Formula
 
     To connect:
         mysql -uroot
-    EOS
+  EOS
   end
 
   plist_options :manual => "mysql.server start"
 
-  def plist; <<-EOS.undent
+  def plist; <<~EOS
     <?xml version="1.0" encoding="UTF-8"?>
     <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
     <plist version="1.0">
@@ -192,7 +169,7 @@ class Mariadb101 < Formula
       <string>#{var}</string>
     </dict>
     </plist>
-    EOS
+  EOS
   end
 
   test do
